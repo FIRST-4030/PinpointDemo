@@ -1,20 +1,20 @@
 package org.firstinspires.ftc.teamcode.OpModes;
 
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
+import com.qualcomm.robotcore.eventloop.opmode.Disabled;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.hardware.DcMotor;
 
-@Autonomous(name = "Wheel Test - AS", group = "Test")
+@Disabled
+@Autonomous(name = "Wheel Test", group = "Test")
 public class WheelTest extends LinearOpMode {
-
-    // Motor declarations
-    private DcMotor leftBack = null;
-    private DcMotor rightBack = null;
-    private DcMotor leftFront = null;
-    private DcMotor rightFront = null;
 
     @Override
     public void runOpMode() {
+
+        // Motor declarations
+        DcMotor leftBack, rightBack, leftFront, rightFront;
+
         // Initialize motors
         leftBack = hardwareMap.get(DcMotor.class, "leftBack");
         rightBack = hardwareMap.get(DcMotor.class, "rightBack");

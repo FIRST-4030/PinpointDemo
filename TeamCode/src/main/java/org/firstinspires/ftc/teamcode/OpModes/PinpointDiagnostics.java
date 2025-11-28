@@ -16,37 +16,41 @@ public class PinpointDiagnostics extends OpMode {
 
     Chassis ch;
     Pinpoint pinpoint;
+    double initialHeading;
 
     @Override
     public void init() {
 
         ch = new Chassis(hardwareMap);
 
-        pinpoint = new Pinpoint(hardwareMap, ch, telemetry, -5.5, 5.0);
+        pinpoint = new Pinpoint(hardwareMap, ch, telemetry, -5.5, 5.0, false);
 
         pinpoint.setEncoderDirection(GoBildaPinpointDriver.EncoderDirection.REVERSED,
-                                     GoBildaPinpointDriver.EncoderDirection.FORWARD);
+                                     GoBildaPinpointDriver.EncoderDirection.REVERSED);
     }
 
     @Override
     public void init_loop() {
 
         pinpoint.odo.update();
+
         pinpoint.odo.recalibrateIMU();
         pinpoint.odo.resetPosAndIMU();
 
-        telemetry.addData("X offset", pinpoint.odo.getXOffset(DistanceUnit.INCH));
-        telemetry.addData("Y offset", pinpoint.odo.getYOffset(DistanceUnit.INCH));
+        telemetry.addData("X offset", pinpoint.odo.getXOffset(DistanceUnit.MM));
+        telemetry.addData("Y offset", pinpoint.odo.getYOffset(DistanceUnit.MM));
         telemetry.addData("Heading Scalar", pinpoint.odo.getYawScalar());
-        telemetry.addData("Initial X", "%.2f", pinpoint.odo.getPosX(DistanceUnit.INCH));
-        telemetry.addData("Initial Y", "%.2f", pinpoint.odo.getPosY(DistanceUnit.INCH));
+        telemetry.addData("Initial X", "%.2f", pinpoint.odo.getPosX(DistanceUnit.MM));
+        telemetry.addData("Initial Y", "%.2f", pinpoint.odo.getPosY(DistanceUnit.MM));
         telemetry.addData("Initial Heading (deg)", "%.1f", pinpoint.odo.getHeading(AngleUnit.DEGREES));
         telemetry.addData("Status", pinpoint.odo.getDeviceStatus());
         telemetry.update();
     }
 
     @Override
-    public void start() {}
+    public void start() {
+        initialHeading = pinpoint.odo.getHeading(AngleUnit.RADIANS);
+    }
 
     @SuppressLint("DefaultLocale")
     @Override
@@ -60,13 +64,19 @@ public class PinpointDiagnostics extends OpMode {
         double encoderY = pinpoint.odo.getEncoderY();
         double currentX = pinpoint.odo.getPosX(DistanceUnit.INCH);
         double currentY = pinpoint.odo.getPosY(DistanceUnit.INCH);
-        double currentHeading = pinpoint.odo.getHeading(AngleUnit.DEGREES);
+        double currentHeading = pinpoint.odo.getHeading(AngleUnit.RADIANS);
+        double headingError = initialHeading - currentHeading;
 
+        // Normalize heading error
+        while (headingError > Math.PI) headingError -= 2 * Math.PI;
+        while (headingError < -Math.PI) headingError += 2 * Math.PI;
+
+        telemetry.addLine(String.format("Heading error: %6.2f", Math.toDegrees(headingError)));
         telemetry.addLine(String.format("Encoder X: %6.2f", encoderX));
         telemetry.addLine(String.format("Encoder Y: %6.2f", encoderY));
         telemetry.addLine(String.format("Current X: %6.2f", currentX));
         telemetry.addLine(String.format("Current Y: %6.2f", currentY));
-        telemetry.addLine(String.format("Current Heading: %.1f", currentHeading));
+        telemetry.addLine(String.format("Current Heading: %.1f", Math.toDegrees(currentHeading)));
         telemetry.update();
     }
 }

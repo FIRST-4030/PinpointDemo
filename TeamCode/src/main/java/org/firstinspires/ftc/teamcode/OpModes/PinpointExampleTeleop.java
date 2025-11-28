@@ -23,10 +23,10 @@ public class PinpointExampleTeleop extends OpMode {
 
         ch = new Chassis(hardwareMap);
 
-        pinpoint = new Pinpoint(hardwareMap, ch, telemetry, -5.5, 5.0);
+        pinpoint = new Pinpoint(hardwareMap, ch, telemetry, -5.5, 5.0, false);
 
-        pinpoint.setEncoderDirection(GoBildaPinpointDriver.EncoderDirection.FORWARD,
-                GoBildaPinpointDriver.EncoderDirection.FORWARD);
+        pinpoint.setEncoderDirection(GoBildaPinpointDriver.EncoderDirection.REVERSED,
+                                     GoBildaPinpointDriver.EncoderDirection.REVERSED);
     }
 
     @Override
@@ -44,7 +44,7 @@ public class PinpointExampleTeleop extends OpMode {
 
     @Override
     public void start() {
-        // Reset the position one more time when starting
+        // Set values one more time when starting
         pinpoint.odo.resetPosAndIMU();
     }
 
