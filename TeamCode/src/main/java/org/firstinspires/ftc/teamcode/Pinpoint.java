@@ -1,10 +1,9 @@
 package org.firstinspires.ftc.teamcode;
 
-import static java.lang.Math.abs;
-
 import android.annotation.SuppressLint;
 
 import com.qualcomm.robotcore.hardware.HardwareMap;
+import com.qualcomm.robotcore.util.Range;
 
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
@@ -20,10 +19,21 @@ public class Pinpoint {
     Datalog datalog;
     boolean logData;
 
-    double currentHeading, currentX, currentY;
-    double targetHeading, targetX, targetY;
+    private double kP = 0.01, kI = 0.0, kD = 0.0001;
+    private double xkP = 0.015, xkI = 0.0, xkD = 0.000;
+    private double ykP = 0.04, ykI = 0.0, ykD = 0.000;
+    double kP_turn = 0.3;
+    double maxSpeed = 0.6; // Maximum drive speed
+    double minSpeed = 0.1; // Maximum drive speed
+    double tolerance = 0.5; // Position tolerance in inches
+    double maxPower;
+
+    double currentX, currentY, currentHeading;
+    double targetX, targetY;
     double errorX, errorY, distanceToTarget;
-    double error, power;
+    double vX, vY, speed, uncorrectedSpeed;
+    double strafeSpeed, forwardSpeed;
+    double headingError, uncorrectedHeading;
 
     public Pinpoint(HardwareMap hw, Chassis ch, Telemetry tele, double offsetX, double offsetY, boolean log) {
 
@@ -53,9 +63,8 @@ public class Pinpoint {
         Set the direction that each of the two odometry pods count. The X (forward) pod should
         increase when you move the robot forward. And the Y (strafe) pod should increase when
         you move the robot to the left.
-         */
-        // odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD,
-        //                          GoBildaPinpointDriver.EncoderDirection.FORWARD);
+           odo.setEncoderDirections(GoBildaPinpointDriver.EncoderDirection.FORWARD,
+                                    GoBildaPinpointDriver.EncoderDirection.FORWARD);
         /*
         Before running the robot, recalibrate the IMU. This needs to happen when the robot is stationary
         The IMU will automatically calibrate when first powered on, but recalibrating before running
@@ -79,15 +88,16 @@ public class Pinpoint {
     }
 
     @SuppressLint("DefaultLocale")
-    public void moveTo(double targetXa, double targetYa, double newRotation) {
-        // Control parameters
-        double kP = 0.15; // Proportional gain - tune this!
-        double maxSpeed = 0.4; // Maximum drive speed
-        double minSpeed = 0.1; // Maximum drive speed
-        double tolerance = 0.5; // Position tolerance in inches
+    public void moveTo(double targetXa, double targetYa, double newHeading) {
 
         targetX = targetXa;
         targetY = targetYa;
+        double targetHeading = Math.toRadians(newHeading);
+
+        long lastTime = System.nanoTime();
+        double lastErrorX = 0, lastErrorY = 0;
+        double derivativeX, derivativeY, integralX = 0, integralY = 0;
+        double headingTolerance = Math.toRadians(5); // 5 degrees
 
         while (true) {
 
@@ -100,18 +110,37 @@ public class Pinpoint {
             // Calculate error
             errorX = targetX - currentX;
             errorY = targetY - currentY;
+            errorY = 0;
+
+            long now = System.nanoTime();
+            double deltaTime = (now - lastTime) / 1e9;
+            lastTime = now;
+
+            derivativeX = (errorX - lastErrorX) / deltaTime;
+            derivativeY = (errorY - lastErrorY) / deltaTime;
+
+            integralX += errorX * deltaTime;
+            integralY += errorY * deltaTime;
+
+            lastErrorX = errorX;
+            lastErrorY = errorY;
+
+//            if (Math.abs(errorX) < tolerance) break;
 
             // Calculate distance to target
             distanceToTarget = Math.hypot(errorX, errorY);
 
+//            if (distanceToTarget < tolerance && Math.abs(headingError) < headingTolerance) break;
             if (distanceToTarget < tolerance) break;
 
             // Calculate velocities using proportional control
-            double vX = errorX * kP;
-            double vY = errorY * kP;
+//            vX = errorX * kP + kI * integralX + kD * derivativeX;
+            vX = errorX * xkP + kI * integralX + kD * derivativeX;
+            vY = errorY * ykP + kI * integralY + kD * derivativeY;
 
             // Limit to max speed
-            double speed = Math.hypot(vX, vY);
+            speed = Math.hypot(vX, vY);
+            uncorrectedSpeed = speed;
             if (speed > maxSpeed) {
                 vX = (vX / speed) * maxSpeed;
                 vY = (vY / speed) * maxSpeed;
@@ -121,37 +150,116 @@ public class Pinpoint {
                 vY = vY / speed * minSpeed;
             }
 
-            // Drive field-relative (no rotation for this example)
-            driveFieldRelative(vX, vY, newRotation);
+            // Calculate heading error
+            currentHeading = odo.getHeading(AngleUnit.RADIANS);
+            headingError = angleWrap(targetHeading - currentHeading);
+            uncorrectedHeading = headingError;
 
-            telemetry.addLine(String.format("Distance: %6.2f",distanceToTarget));
-            telemetry.addLine(String.format("vX: %6.2f, vY: %6.2f",vX,vY));
-            telemetry.update();
+            // Wrap angle to [-π, π]
+            while (headingError > Math.PI) headingError -= 2 * Math.PI;
+            while (headingError < -Math.PI) headingError += 2 * Math.PI;
+            double turnSpeed = Range.clip(headingError * 0.3, -1.0, 1.0);
+
+            // Drive field-relative (no rotation for this example)
+//            driveFieldRelative(vX, vY, turnSpeed);
+
+            // Calculate drive speeds
+            forwardSpeed = Range.clip(vX, -1.0, 1.0);
+            strafeSpeed  = Range.clip(vY, -1.0, 1.0);
+
+            // Calculate turn speed (only turn aggressively when close to target)
+//            if (distanceToTarget < 5.0) {  // Within 12 inches
+//                turnSpeed = Range.clip(headingError * kP_turn, -1.0, 1.0);
+//            } else {
+//                turnSpeed = 0;  // Don't rotate until close
+//            }
+
+            // Drive the robot
+            driveFieldRelative(strafeSpeed, forwardSpeed, turnSpeed);
+
+//            telemetry.addLine(String.format("Distance to Target: %6.2f",distanceToTarget));
+//            telemetry.addLine(String.format("vX: %6.2f, vY: %6.2f",vX,vY));
+//            telemetry.update();
 
             if (logData) logOneSample();
         }
 
-        chassis.stopMotors();
+        driveFieldRelative(0,0,0);
+//        chassis.stopMotors();
+    }
+    /**
+     * Wrap angle to [-PI, PI]
+     */
+    private double angleWrap(double angle) {
+        while (angle > Math.PI) angle -= 2 * Math.PI;
+        while (angle < -Math.PI) angle += 2 * Math.PI;
+        return angle;
     }
 
-    private void driveFieldRelative(double vx, double vy, double rotation) {
-        // Get robot heading from Pinpoint's built-in IMU
+    public double getKp() {
+        return this.kP;
+    }
+
+    public double getKi() {
+        return this.kI;
+    }
+
+    public double getKd() {
+        return this.kD;
+    }
+
+    public double getMaxSpeed() {
+        return this.maxSpeed;
+    }
+
+    public double getTolerance() {
+        return this.tolerance;
+    }
+
+    public void setKp(double kP) {
+        this.kP = kP;
+    }
+
+    public void setKi(double kI) {
+        this.kI = kI;
+    }
+
+    public void setKd(double kD) {
+        this.kD = kD;
+    }
+
+    public void setMaxSpeed(double maxSpeed) {
+        this.maxSpeed = maxSpeed;
+    }
+
+    public void setTolerance(double tolerance) {
+        this.tolerance = tolerance;
+    }
+
+    /**
+     * Field-relative drive using mecanum wheels
+     */
+    public void driveFieldRelative(double strafeSpeed, double forwardSpeed, double turnSpeed) {
+        // Get current heading
         double heading = odo.getHeading(AngleUnit.RADIANS);
 
-        // Rotate velocity vector by negative heading to convert to robot frame
-        double robotVx = vx * Math.cos(-heading) - vy * Math.sin(-heading);
-        double robotVy = vx * Math.sin(-heading) + vy * Math.cos(-heading);
+        // Rotate the movement direction counter to the robot's rotation
+        double rotatedStrafe = strafeSpeed * Math.cos(-heading) - forwardSpeed * Math.sin(-heading);
+        double rotatedForward = strafeSpeed * Math.sin(-heading) + forwardSpeed * Math.cos(-heading);
 
-        // Calculate motor powers for mecanum drive
-        double frontLeftPower = robotVx + robotVy + rotation;
-        double frontRightPower = robotVx - robotVy - rotation;
-        double backLeftPower = robotVx - robotVy + rotation;
-        double backRightPower = robotVx + robotVy - rotation;
+        // Calculate wheel powers
+        double frontLeftPower = rotatedForward + rotatedStrafe + turnSpeed;
+        double frontRightPower = rotatedForward - rotatedStrafe - turnSpeed;
+        double backLeftPower = rotatedForward - rotatedStrafe + turnSpeed;
+        double backRightPower = rotatedForward + rotatedStrafe - turnSpeed;
 
-        // Normalize powers if any exceed 1.0
-        double maxPower = Math.max(Math.max(Math.abs(frontLeftPower), Math.abs(frontRightPower)),
-                          Math.max(Math.abs(backLeftPower),           Math.abs(backRightPower)));
+        // Normalize if any power exceeds 1.0
+        maxPower = Math.max(Math.abs(frontLeftPower),
+                          Math.max(Math.abs(frontRightPower),
+                          Math.max(Math.abs(backLeftPower),
+                          Math.abs(backRightPower))));
 
+//        maxPower = maxSpeed;
         if (maxPower > 1.0) {
             frontLeftPower /= maxPower;
             frontRightPower /= maxPower;
@@ -167,22 +275,21 @@ public class Pinpoint {
     }
 
     private void logOneSample() {
+        datalog.maxPower.set(maxPower);
         datalog.targetX.set(targetX);
+        datalog.vX.set(vX);
+        datalog.vY.set(vY);
+        datalog.speed.set(speed);
+        datalog.uncorrectedSpeed.set(uncorrectedSpeed);
         datalog.targetY.set(targetY);
         datalog.currentX.set(currentX);
         datalog.currentY.set(currentY);
+        datalog.currentHeading.set(Math.toDegrees(currentHeading));
+        datalog.uncorrectedHeading.set(Math.toDegrees(uncorrectedHeading));
         datalog.errorX.set(errorX);
         datalog.errorY.set(errorY);
         datalog.distanceToTarget.set(distanceToTarget);
         datalog.writeLine();
-    }
-
-    public final void sleep(long milliseconds) {
-        try {
-            Thread.sleep(milliseconds);
-        } catch (InterruptedException e) {
-            Thread.currentThread().interrupt();
-        }
     }
 
     /**
@@ -198,13 +305,20 @@ public class Pinpoint {
          * Note: Order here is NOT important. The order is important
          *       in the setFields() call below
          */
+        public Datalogger.GenericField maxPower = new Datalogger.GenericField("MaxPower");
         public Datalogger.GenericField targetX = new Datalogger.GenericField("Target-X");
+        public Datalogger.GenericField vX = new Datalogger.GenericField("vX");
+        public Datalogger.GenericField vY = new Datalogger.GenericField("vY");
+        public Datalogger.GenericField speed = new Datalogger.GenericField("speed");
+        public Datalogger.GenericField uncorrectedSpeed = new Datalogger.GenericField("Uncorr speed");
         public Datalogger.GenericField targetY = new Datalogger.GenericField("Target-Y");
         public Datalogger.GenericField currentX = new Datalogger.GenericField("X");
         public Datalogger.GenericField currentY = new Datalogger.GenericField("Y");
+        public Datalogger.GenericField currentHeading = new Datalogger.GenericField("Heading");
+        public Datalogger.GenericField uncorrectedHeading = new Datalogger.GenericField("Uncorr Heading");
         public Datalogger.GenericField errorX = new Datalogger.GenericField("Err X");
         public Datalogger.GenericField errorY = new Datalogger.GenericField("Err Y");
-        public Datalogger.GenericField distanceToTarget = new Datalogger.GenericField("Distance");
+        public Datalogger.GenericField distanceToTarget = new Datalogger.GenericField("Delta");
 
         public Datalog(String name) {
             datalogger = new Datalogger.Builder()
@@ -216,11 +330,18 @@ public class Pinpoint {
                  *       fields is the order in which they will appear in the log.
                  */
                 .setFields(
+                        maxPower,
                         targetX,
                         targetY,
+                        distanceToTarget,
+                        vX,
+                        vY,
+                        speed,
+                        uncorrectedSpeed,
                         currentX,
                         currentY,
-                        distanceToTarget,
+                        currentHeading,
+                        uncorrectedHeading,
                         errorX,
                         errorY
                 )

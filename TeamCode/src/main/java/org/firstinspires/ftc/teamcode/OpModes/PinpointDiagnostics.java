@@ -7,6 +7,7 @@ import com.qualcomm.robotcore.eventloop.opmode.TeleOp;
 
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 import org.firstinspires.ftc.teamcode.Chassis;
 import org.firstinspires.ftc.teamcode.GoBildaPinpointDriver;
 import org.firstinspires.ftc.teamcode.Pinpoint;
@@ -27,6 +28,10 @@ public class PinpointDiagnostics extends OpMode {
 
         pinpoint.setEncoderDirection(GoBildaPinpointDriver.EncoderDirection.REVERSED,
                                      GoBildaPinpointDriver.EncoderDirection.REVERSED);
+
+        pinpoint.odo.setPosition(new Pose2D(DistanceUnit.INCH, 0, 0,AngleUnit.DEGREES,0));
+        pinpoint.odo.recalibrateIMU();
+        pinpoint.odo.resetPosAndIMU();
     }
 
     @Override
@@ -34,11 +39,8 @@ public class PinpointDiagnostics extends OpMode {
 
         pinpoint.odo.update();
 
-        pinpoint.odo.recalibrateIMU();
-        pinpoint.odo.resetPosAndIMU();
-
-        telemetry.addData("X offset", pinpoint.odo.getXOffset(DistanceUnit.MM));
-        telemetry.addData("Y offset", pinpoint.odo.getYOffset(DistanceUnit.MM));
+        telemetry.addData("X offset", pinpoint.odo.getXOffset(DistanceUnit.INCH));
+        telemetry.addData("Y offset", pinpoint.odo.getYOffset(DistanceUnit.INCH));
         telemetry.addData("Heading Scalar", pinpoint.odo.getYawScalar());
         telemetry.addData("Initial X", "%.2f", pinpoint.odo.getPosX(DistanceUnit.MM));
         telemetry.addData("Initial Y", "%.2f", pinpoint.odo.getPosY(DistanceUnit.MM));
@@ -77,6 +79,7 @@ public class PinpointDiagnostics extends OpMode {
         telemetry.addLine(String.format("Current X: %6.2f", currentX));
         telemetry.addLine(String.format("Current Y: %6.2f", currentY));
         telemetry.addLine(String.format("Current Heading: %.1f", Math.toDegrees(currentHeading)));
+        telemetry.addLine(String.format("Current Velocity: %6.2f", pinpoint.odo.getPosX(DistanceUnit.INCH)));
         telemetry.update();
     }
 }
