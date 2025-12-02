@@ -8,6 +8,7 @@ import com.qualcomm.robotcore.util.Range;
 import org.firstinspires.ftc.robotcore.external.Telemetry;
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
+import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
 
 public class Pinpoint {
 
@@ -34,6 +35,7 @@ public class Pinpoint {
     double vX, vY, speed, uncorrectedSpeed;
     double strafeSpeed, forwardSpeed;
     double headingError, uncorrectedHeading;
+    Pose2D pose;
 
     public Pinpoint(HardwareMap hw, Chassis ch, Telemetry tele, double offsetX, double offsetY, boolean log) {
 
@@ -103,9 +105,11 @@ public class Pinpoint {
 
             odo.update();
 
+            pose = odo.getPosition();
+
             // Get current position from Pinpoint
-            currentX = odo.getPosition().getX(DistanceUnit.INCH);
-            currentY = odo.getPosition().getY(DistanceUnit.INCH);
+            currentX = pose.getX(DistanceUnit.INCH);
+            currentY = pose.getY(DistanceUnit.INCH);
 
             // Calculate error
             errorX = targetX - currentX;
@@ -151,7 +155,7 @@ public class Pinpoint {
             }
 
             // Calculate heading error
-            currentHeading = odo.getHeading(AngleUnit.RADIANS);
+            currentHeading = pose.getHeading(AngleUnit.RADIANS);
             headingError = angleWrap(targetHeading - currentHeading);
             uncorrectedHeading = headingError;
 
@@ -241,7 +245,8 @@ public class Pinpoint {
      */
     public void driveFieldRelative(double strafeSpeed, double forwardSpeed, double turnSpeed) {
         // Get current heading
-        double heading = odo.getHeading(AngleUnit.RADIANS);
+        Pose2D pose = odo.getPosition();
+        double heading = pose.getHeading(AngleUnit.RADIANS);
 
         // Rotate the movement direction counter to the robot's rotation
         double rotatedStrafe = strafeSpeed * Math.cos(-heading) - forwardSpeed * Math.sin(-heading);

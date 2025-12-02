@@ -8,10 +8,11 @@ import android.annotation.SuppressLint;
 import com.qualcomm.robotcore.eventloop.opmode.Autonomous;
 import com.qualcomm.robotcore.eventloop.opmode.LinearOpMode;
 import com.qualcomm.robotcore.util.Range;
-
 import org.firstinspires.ftc.robotcore.external.navigation.AngleUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.DistanceUnit;
 import org.firstinspires.ftc.robotcore.external.navigation.Pose2D;
+import org.firstinspires.ftc.robotcore.external.navigation.UnnormalizedAngleUnit;
+
 import org.firstinspires.ftc.teamcode.Chassis;
 import org.firstinspires.ftc.teamcode.Datalogger;
 import org.firstinspires.ftc.teamcode.GoBildaPinpointDriver;
@@ -39,9 +40,11 @@ public class PinpointExampleAuto extends LinearOpMode {
         pinpoint.setEncoderDirection(GoBildaPinpointDriver.EncoderDirection.REVERSED,
                                      GoBildaPinpointDriver.EncoderDirection.REVERSED);
 
+        Pose2D pose = pinpoint.odo.getPosition();
+
         // One calibration does not necessarily clear the hardware
-        while ((abs(pinpoint.odo.getPosX(DistanceUnit.INCH))>0.1) &&
-               (abs(pinpoint.odo.getPosX(DistanceUnit.INCH))>0.1)) {
+        while ((abs(pose.getX(DistanceUnit.INCH))>0.1) &&
+               (abs(pose.getX(DistanceUnit.INCH))>0.1)) {
             pinpoint.odo.update();
             pinpoint.odo.resetPosAndIMU();
             pinpoint.odo.recalibrateIMU();
